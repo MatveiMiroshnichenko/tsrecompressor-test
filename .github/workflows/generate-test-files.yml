@@ -15,28 +15,32 @@ jobs:
       - name: Install ffmpeg
         run: brew install ffmpeg
 
-      - name: Generate original stream (ffmpeg)
+      - name: Run pipeline for 60 seconds
+        timeout-minutes: 2
         run: |
           mkdir -p output/original output/recompressed
+          xattr -cr bin/new/tsrecompressor
+          chmod +x bin/new/tsrecompressor
+
+          # Enable job control so the pipeline runs in its own process group
+          set -m
+
+          # ffmpeg → tee (saves original) → tsrecompressor (saves recompressed)
           ffmpeg -y \
             -f lavfi -i "smptehdbars=size=1920x1080:rate=30" \
             -f lavfi -i "sine=frequency=1000:sample_rate=48000" \
             -map 0:v -map 1:a \
             -c:v mpeg2video -b:v 8M -g 15 \
             -c:a mp2 -b:a 192k \
-            -t 10 \
-            -f mpegts \
-            output/original/test_stream.ts
+            -f mpegts pipe:1 2>/dev/null \
+            | tee output/original/stream.ts \
+            | bin/new/tsrecompressor -o output/recompressed/stream.ts &
 
-      - name: Allow tsrecompressor binary
-        run: |
-          sudo spctl --master-disable
-          xattr -cr bin/new/tsrecompressor
-          chmod +x bin/new/tsrecompressor
-
-      - name: Recompress with tsrecompressor
-        run: |
-          bin/new/tsrecompressor -i output/original/test_stream.ts -o output/recompressed/test_stream.ts
+          PIPELINE_PID=$!
+          sleep 60
+          # Kill the entire process group (ffmpeg + tee + tsrecompressor)
+          kill -- -$PIPELINE_PID 2>/dev/null || true
+          wait $PIPELINE_PID 2>/dev/null || true
 
       - name: Upload original output
         uses: actions/upload-artifact@v4
