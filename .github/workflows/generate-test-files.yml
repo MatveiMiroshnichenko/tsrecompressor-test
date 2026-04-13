@@ -28,15 +28,15 @@ jobs:
             -f mpegts \
             output/original/test_stream.ts
 
-      - name: Recompress with tsrecompressor (new)
+      - name: Allow tsrecompressor binary
         run: |
+          sudo spctl --master-disable
+          xattr -cr bin/new/tsrecompressor
           chmod +x bin/new/tsrecompressor
-          bin/new/tsrecompressor -i output/original/test_stream.ts -o output/recompressed/test_stream_new.ts
 
-      - name: Recompress with tsrecompressor (old)
+      - name: Recompress with tsrecompressor
         run: |
-          chmod +x bin/old/tsrecompressor
-          bin/old/tsrecompressor -i output/original/test_stream.ts -o output/recompressed/test_stream_old.ts
+          bin/new/tsrecompressor -i output/original/test_stream.ts -o output/recompressed/test_stream.ts
 
       - name: Upload original output
         uses: actions/upload-artifact@v4
