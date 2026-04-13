@@ -1,0 +1,51 @@
+name: Generate Test Files
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+jobs:
+  generate:
+    runs-on: macos-15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ffmpeg
+        run: brew install ffmpeg
+
+      - name: Generate original stream (ffmpeg)
+        run: |
+          mkdir -p output/original output/recompressed
+          ffmpeg -y \
+            -f lavfi -i "smptehdbars=size=1920x1080:rate=30" \
+            -f lavfi -i "sine=frequency=1000:sample_rate=48000" \
+            -map 0:v -map 1:a \
+            -c:v mpeg2video -b:v 8M -g 15 \
+            -c:a mp2 -b:a 192k \
+            -t 10 \
+            -f mpegts \
+            output/original/test_stream.ts
+
+      - name: Recompress with tsrecompressor (new)
+        run: |
+          chmod +x bin/new/tsrecompressor
+          bin/new/tsrecompressor -i output/original/test_stream.ts -o output/recompressed/test_stream_new.ts
+
+      - name: Recompress with tsrecompressor (old)
+        run: |
+          chmod +x bin/old/tsrecompressor
+          bin/old/tsrecompressor -i output/original/test_stream.ts -o output/recompressed/test_stream_old.ts
+
+      - name: Upload original output
+        uses: actions/upload-artifact@v4
+        with:
+          name: original
+          path: output/original/
+
+      - name: Upload recompressed output
+        uses: actions/upload-artifact@v4
+        with:
+          name: recompressed
+          path: output/recompressed/
